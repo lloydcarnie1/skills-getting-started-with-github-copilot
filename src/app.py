@@ -98,10 +98,44 @@ def     signup_for_activity(activity_name: str, email: str):
     # Get the specific activity
     activity = activities[activity_name]
 
-    #validate email is not already signed up
-    if email in activity["participants"]:
-        raise HTTPException(status_code=400, detail="Email already signed up for this activity")    
-    
+    # Normalize email for comparisons and storage
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+
+    normalized_email = email.strip()
+
+    # Prevent duplicate registrations (case-insensitive)
+    if any(p.strip().lower() == normalized_email.lower() for p in activity.get("participants", [])):
+        raise HTTPException(status_code=400, detail="Student already registered for this activity")
+
+    # Enforce max participants
+    if len(activity.get("participants", [])) >= activity.get("max_participants", 0):
+        raise HTTPException(status_code=400, detail="Activity is full")
+
     # Add student
-    activity["participants"].append(email)
-    return {"message": f"Signed up {email} for {activity_name}"}
+    activity.setdefault("participants", []).append(normalized_email)
+    return {"message": f"Signed up {normalized_email} for {activity_name}"}
+
+
+@app.delete("/activities/{activity_name}/participants")
+def unregister_participant(activity_name: str, email: str):
+    """Unregister a student from an activity"""
+    if activity_name not in activities:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+
+    activity = activities[activity_name]
+    normalized_email = email.strip()
+
+    participants = activity.get("participants", [])
+
+    # Find participant index ignoring case
+    idx = next((i for i, p in enumerate(participants) if p.strip().lower() == normalized_email.lower()), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="Participant not found for this activity")
+
+    # Remove participant
+    removed = participants.pop(idx)
+    return {"message": f"Unregistered {removed} from {activity_name}"}
